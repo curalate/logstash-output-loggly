@@ -119,6 +119,13 @@ class LogStash::Outputs::Loggly < LogStash::Outputs::Base
   end
 
   public
+  def multi_receive(events)
+    events.each { |event|
+      receive(event)
+    }
+  end # def multi_receive
+
+  public
   def receive(event)
     return unless output?(event)
 
@@ -129,14 +136,18 @@ class LogStash::Outputs::Loggly < LogStash::Outputs::Base
     # we should ship logs with the default tag value.
     tag = 'logstash' if /^%{\w+}/.match(tag)
 
+    @logger.debug("Raw event", :event => event)
+
     buffer_receive([event, key, tag])
   end # def receive
 
   public
   def format_message(event)
+    @logger.debug("Actual event: #{event.to_json}")
     event.to_json
   end
 
+  # Flush events from the buffer and send them to the Loggly bulk API
   def flush(events, close=false)
     # Avoid creating a new string for newline every time
     newline = "\n".freeze
@@ -152,7 +163,7 @@ class LogStash::Outputs::Loggly < LogStash::Outputs::Base
   private
   def send_event(url, message)
     url = URI.parse(url)
-    @logger.info("Loggly URL", :url => url)
+    @logger.debug("Loggly URL", :url => url)
 
     http = Net::HTTP::Proxy(@proxy_host,
                             @proxy_port,
@@ -183,7 +194,7 @@ class LogStash::Outputs::Loggly < LogStash::Outputs::Base
 
           # HTTP_SUCCESS :Code 2xx
           when HTTP_SUCCESS
-            @logger.info("Event send to Loggly")
+            @logger.debug("Event send to Loggly. Response: ", response.body)
 
           # HTTP_FORBIDDEN :Code 403
           when HTTP_FORBIDDEN
